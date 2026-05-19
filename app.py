@@ -4,7 +4,11 @@ import pandas as pd
 from src.language_detector import detect_language
 from src.static_analyzer import run_static_analysis
 from src.llm_analyzer import analyze_code_with_llm
-from src.report_generator import generate_markdown_report, generate_json_report
+from src.report_generator import (
+    generate_markdown_report,
+    generate_json_report,
+    generate_pdf_report,
+)
 from src.rule_based_analyzer import rule_based_review
 
 
@@ -108,6 +112,10 @@ with st.sidebar:
         "Do not upload private production code unless you are allowed to send it to an AI API."
     )
 
+    if st.button("Clear Analysis"):
+        st.session_state.clear()
+        st.rerun()
+
 
 input_tab, sample_tab = st.tabs(["📤 Upload / Paste Code", "🧪 Sample Test Code"])
 
@@ -206,6 +214,7 @@ if analyze_button:
 
     with st.spinner("Analyzing code..."):
         static_findings = []
+        analysis_mode = "AI + Static Analysis"
 
         if run_static:
             static_findings = run_static_analysis(code, filename)
@@ -220,10 +229,15 @@ if analyze_button:
             st.success("AI-powered analysis completed successfully.")
 
         except Exception as e:
-            st.warning(
-                "AI analysis could not run. Showing static and rule-based analysis report."
+            analysis_mode = "Static + Rule-Based Analysis"
+
+            st.info(
+                "AI analysis is currently unavailable. "
+                "Using local static and rule-based analysis instead."
             )
-            st.error(str(e))
+
+            with st.expander("Technical error details"):
+                st.write(str(e))
 
             result = rule_based_review(
                 code=code,
@@ -235,6 +249,7 @@ if analyze_button:
         st.session_state["static_findings"] = static_findings
         st.session_state["original_code"] = code
         st.session_state["language"] = language
+        st.session_state["analysis_mode"] = analysis_mode
 
 
 if "analysis_result" in st.session_state:
@@ -242,6 +257,7 @@ if "analysis_result" in st.session_state:
     static_findings = st.session_state["static_findings"]
     original_code = st.session_state["original_code"]
     language = st.session_state.get("language", "text")
+    analysis_mode = st.session_state.get("analysis_mode", "Unknown")
 
     issues = result.get("issues", [])
     issues_df = create_issues_dataframe(issues)
@@ -250,7 +266,7 @@ if "analysis_result" in st.session_state:
 
     st.header("📊 Analysis Results")
 
-    result_col1, result_col2, result_col3, result_col4 = st.columns(4)
+    result_col1, result_col2, result_col3, result_col4, result_col5 = st.columns(5)
 
     result_col1.metric("Risk Score", f"{result.get('risk_score', 0)}/100")
     result_col2.metric("Issues Found", len(issues))
@@ -259,14 +275,17 @@ if "analysis_result" in st.session_state:
     critical_count = len(
         [issue for issue in issues if issue.get("severity") == "Critical"]
     )
-    result_col4.metric("Critical Issues", critical_count)
 
-    overview_tab, issues_tab, dashboard_tab, code_tab, report_tab = st.tabs(
+    result_col4.metric("Critical Issues", critical_count)
+    result_col5.metric("Analysis Mode", analysis_mode)
+
+    overview_tab, issues_tab, dashboard_tab, code_tab, architecture_tab, report_tab = st.tabs(
         [
             "📌 Overview",
             "🐞 Issues",
             "📈 Dashboard",
             "💻 Code Review",
+            "🏗️ Architecture",
             "📥 Reports"
         ]
     )
@@ -408,6 +427,73 @@ if "analysis_result" in st.session_state:
             language=language.lower()
         )
 
+    with architecture_tab:
+        st.subheader("System Architecture")
+
+        st.write(
+            "Auto Code Analyzer uses a layered architecture. "
+            "The app can work with or without AI API access."
+        )
+
+        st.code(
+            """User uploads or pastes code
+        ↓
+Streamlit frontend reads the code
+        ↓
+Language detector identifies the programming language
+        ↓
+Static analyzers run locally
+        ↓
+Rule-based analyzer checks common vulnerability patterns
+        ↓
+Optional OpenAI API analysis generates deeper explanations
+        ↓
+Results are displayed in tabs
+        ↓
+Reports are exported as Markdown, JSON, and PDF""",
+            language="text"
+        )
+
+        st.subheader("Main Components")
+
+        architecture_data = pd.DataFrame(
+            [
+                {
+                    "Component": "Streamlit UI",
+                    "Purpose": "Provides upload, paste, tabs, charts, filters, and downloads."
+                },
+                {
+                    "Component": "Language Detector",
+                    "Purpose": "Detects programming language from file extension or code patterns."
+                },
+                {
+                    "Component": "Static Analyzer",
+                    "Purpose": "Runs Bandit and Semgrep to find known security issues."
+                },
+                {
+                    "Component": "Rule-Based Analyzer",
+                    "Purpose": "Detects common risky patterns like hardcoded passwords, SQL injection, and unsafe shell commands."
+                },
+                {
+                    "Component": "OpenAI Analyzer",
+                    "Purpose": "Optionally generates AI explanations, refactoring suggestions, and deeper review."
+                },
+                {
+                    "Component": "Report Generator",
+                    "Purpose": "Exports analysis results as Markdown, JSON, and PDF."
+                },
+            ]
+        )
+
+        st.dataframe(architecture_data, use_container_width=True)
+
+        st.subheader("Fallback Design")
+
+        st.info(
+            "If OpenAI API quota is unavailable, the app automatically switches "
+            "to Static + Rule-Based Analysis so the project still works."
+        )
+
     with report_tab:
         st.subheader("Download Reports")
 
@@ -423,19 +509,37 @@ if "analysis_result" in st.session_state:
             original_code=original_code
         )
 
-        st.download_button(
-            label="Download Markdown Report",
-            data=markdown_report,
-            file_name="auto_code_analysis_report.md",
-            mime="text/markdown"
+        pdf_report = generate_pdf_report(
+            result=result,
+            static_findings=static_findings,
+            original_code=original_code
         )
 
-        st.download_button(
-            label="Download JSON Report",
-            data=json_report,
-            file_name="auto_code_analysis_report.json",
-            mime="application/json"
-        )
+        report_col1, report_col2, report_col3 = st.columns(3)
+
+        with report_col1:
+            st.download_button(
+                label="Download Markdown Report",
+                data=markdown_report,
+                file_name="auto_code_analysis_report.md",
+                mime="text/markdown"
+            )
+
+        with report_col2:
+            st.download_button(
+                label="Download JSON Report",
+                data=json_report,
+                file_name="auto_code_analysis_report.json",
+                mime="application/json"
+            )
+
+        with report_col3:
+            st.download_button(
+                label="Download PDF Report",
+                data=pdf_report,
+                file_name="auto_code_analysis_report.pdf",
+                mime="application/pdf"
+            )
 
         with st.expander("Static Analyzer Raw Findings"):
             st.json(static_findings)

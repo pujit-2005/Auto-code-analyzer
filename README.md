@@ -1,5 +1,10 @@
 # Auto Code Analyzer
 
+## Live Demo
+
+https://auto-code-analyzer-pujit.streamlit.app/
+
+
 Auto Code Analyzer is a Streamlit-based code review assistant that analyzes source code for bugs, security issues, code smells, and maintainability problems.
 
 ## Features

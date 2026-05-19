@@ -6,3 +6,4 @@ bandit
 radon
 pandas
 semgrep
+reportlab
