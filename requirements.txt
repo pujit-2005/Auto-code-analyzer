@@ -1,0 +1,8 @@
+streamlit
+openai
+python-dotenv
+pygments
+bandit
+radon
+pandas
+semgrep
