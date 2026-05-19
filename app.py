@@ -228,16 +228,13 @@ if analyze_button:
 
             st.success("AI-powered analysis completed successfully.")
 
-        except Exception as e:
+        except Exception:
             analysis_mode = "Static + Rule-Based Analysis"
 
             st.info(
                 "AI analysis is currently unavailable. "
                 "Using local static and rule-based analysis instead."
             )
-
-            with st.expander("Technical error details"):
-                st.write(str(e))
 
             result = rule_based_review(
                 code=code,
